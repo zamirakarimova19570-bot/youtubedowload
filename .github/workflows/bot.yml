@@ -1,98 +1,32 @@
-name: Run Telegram Bot
+name: Run Bot
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
-  schedule:
-    - cron: '0 */3 * * *'  # Har 3 soatda
+    branches: [main]
 
 jobs:
-  run-bot:
+  run:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
+    - uses: actions/checkout@v4
     
-    - name: Set up Python
+    - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
-        cache: 'pip'
     
-    - name: Install system dependencies
+    - name: Install dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg python3-pip
+        pip install python-telegram-bot yt-dlp
+        sudo apt-get install -y ffmpeg
     
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install python-telegram-bot==20.3
-        pip install yt-dlp
-        pip install python-dotenv
-    
-    - name: Create .env file from secrets
-      run: |
-        echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" > .env
-        echo "# Bot created by Isoqov Mironshoh" >> .env
-        echo "MAX_SIZE=40" >> .env
-        echo "TIMEOUT=300" >> .env
-    
-    - name: Verify token is set
-      run: |
-        if [ -z "${{ secrets.BOT_TOKEN }}" ]; then
-          echo "❌ ERROR: BOT_TOKEN secret is empty!"
-          echo "Please add BOT_TOKEN to GitHub Secrets"
-          exit 1
-        else
-          echo "✅ BOT_TOKEN is set (first 10 chars): ${BOT_TOKEN:0:10}..."
-          echo "👤 Bot by Isoqov Mironshoh"
-        fi
+    - name: Run Bot
       env:
-        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-    
-    - name: List files for debugging
-      run: |
-        echo "📁 Current directory:"
-        ls -la
-        echo -e "\n📄 .env file content (masked):"
-        head -2 .env
-        echo "*** [TOKEN MASKED] ***"
-    
-    - name: Run Telegram Bot
-      env:
-        # ✅ TOKENNI TO'G'RI UZATISH
+        # ✅ FAQAT BIR TOKEN - BOT_TOKEN
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
       run: |
-        echo "🚀 Starting Telegram Bot..."
-        echo "👤 Developed by Isoqov Mironshoh"
-        echo "⏰ Time: $(date)"
-        echo "📦 Max video size: 40MB"
-        echo "⏳ Wait time: 5 seconds"
-        
-        # Botni ishga tushirish
-        python bot.py &
-        BOT_PID=$!
-        
-        echo "✅ Bot started with PID: $BOT_PID"
-        
-        # Botni 30 soniya monitor qilish
-        sleep 30
-        
-        # Bot hali ham ishlayotganligini tekshirish
-        if ps -p $BOT_PID > /dev/null; then
-          echo "🎉 Bot is running successfully!"
-          echo "🤖 Ready to download YouTube videos"
-          echo "👤 Isoqov Mironshoh"
-          
-          # Botni to'xtatmasdan ishlashiga ruxsat berish
-          wait $BOT_PID
-        else
-          echo "❌ Bot stopped unexpectedly!"
-          exit 1
-        fi
+        echo "🤖 Bot ishga tushmoqda..."
+        echo "👤 Isoqov Mironshoh"
+        python bot.py
