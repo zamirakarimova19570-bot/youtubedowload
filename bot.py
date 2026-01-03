@@ -4,28 +4,38 @@ import logging
 from datetime import datetime
 from typing import Optional
 import subprocess
-import shutil
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 
-# Bot tokeni - GitHub Secrets dan olinadi
-BOT_TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')
+# ✅ FAQAT BIR JOYDA TOKEN QO'YILGAN
+BOT_TOKEN = os.getenv('7879907267:AAE6zgRgFm9tC35V0MHZte1B5IVBsh8J5DE')
 
-# Log konfiguratsiyasi
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# Agar token bo'lmasa, dastur to'xtaydi
+if not BOT_TOKEN:
+    print("❌ XATOLIK: BOT_TOKEN environment variable topilmadi!")
+    print("ℹ️ GitHub Secrets ga BOT_TOKEN qo'shing yoki .env faylida belgilang")
+    exit(1)
+
+# Log konfiguratsiyasi - har bir logda imzo
+class SignatureLogger(logging.Formatter):
+    def format(self, record):
+        message = super().format(record)
+        return f"{message}\n👤 Isoqov Mironshoh"
+
 logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+handler.setFormatter(SignatureLogger('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 # Statistikalar
 user_stats = {}
 
 class VideoDownloader:
     def __init__(self):
-        self.max_size_mb = 40  # Maksimum hajm 40 MB
+        self.max_size_mb = 40
         self.temp_dir = "temp_downloads"
         os.makedirs(self.temp_dir, exist_ok=True)
     
@@ -36,36 +46,32 @@ class VideoDownloader:
             if chat_id not in user_stats:
                 user_stats[chat_id] = {'downloads': 0, 'last_download': None}
             
-            # 5 soniya kutish (ogohlantirish)
+            # 5 soniya kutish
             await asyncio.sleep(5)
             
             # yt-dlp ni tekshirish
             try:
                 downloader = 'yt-dlp'
-                subprocess.run([downloader, '--version'], check=True, capture_output=True)
+                subprocess.run([downloader, '--version'], check=True, capture_output=True, timeout=5)
             except:
                 downloader = 'youtube-dl'
             
-            # Fayl nomi
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_template = f"{self.temp_dir}/{chat_id}_{timestamp}_%(title)s.%(ext)s"
             
-            # Yuklash buyrug'i - 40MB limit uchun format tanlash
             cmd = [
                 downloader,
                 url,
-                '-f', 'best[filesize<40M]',  # 40MB dan oshmasligi uchun
+                '-f', 'best[filesize<40M]',
                 '--max-filesize', '40M',
                 '--no-playlist',
                 '-o', output_template,
                 '--quiet',
-                '--no-warnings',
-                '--format-sort', 'res,ext:mp4:m4a'
+                '--no-warnings'
             ]
             
-            logger.info(f"Yuklanmoqda: {url} | User: {chat_id}")
+            logger.info(f"Video yuklanmoqda: {url[:50]}... | User: {chat_id}")
             
-            # Yuklash jarayoni
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -75,14 +81,12 @@ class VideoDownloader:
             stdout, stderr = await process.communicate()
             
             if process.returncode == 0:
-                # Yuklangan faylni topish
                 for file in os.listdir(self.temp_dir):
                     if file.startswith(f"{chat_id}_{timestamp}"):
                         file_path = os.path.join(self.temp_dir, file)
-                        file_size = os.path.getsize(file_path) / (1024 * 1024)  # MB da
+                        file_size = os.path.getsize(file_path) / (1024 * 1024)
                         
                         if file_size <= self.max_size_mb:
-                            # Statistikani yangilash
                             user_stats[chat_id]['downloads'] += 1
                             user_stats[chat_id]['last_download'] = datetime.now()
                             
@@ -99,14 +103,18 @@ class VideoDownloader:
             return {'success': False, 'error': stderr.decode() if stderr else 'Noma\'lum xatolik'}
             
         except Exception as e:
-            logger.error(f"Download error: {e}")
+            logger.error(f"Download xatosi: {e}")
             return {'success': False, 'error': str(e)}
+
+async def send_with_signature(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: str, **kwargs):
+    """Har bir xabar ostiga imzo qo'shish"""
+    signature = "\n\n👤 Isoqov Mironshoh"
+    await context.bot.send_message(chat_id, text + signature, **kwargs)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start komandasi"""
     user = update.effective_user
-    welcome_text = f"""
-👋 Assalomu alaykum {user.first_name}!
+    welcome_text = f"""👋 Assalomu alaykum {user.first_name}!
 
 🎬 **YouTube Video Yuklovchi Bot** ga xush kelibsiz!
 
@@ -117,18 +125,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Yuklash 5 soniya davom etadi
 • Faqat bitta video yuklash mumkin
 
-📎 Video linkini yuboring yoki quyidagi buttonlardan foydalaning.
-    """
+📎 Video linkini yuboring."""
     
     keyboard = [
         [InlineKeyboardButton("📥 Video Yuklash", callback_data='download_info')],
         [InlineKeyboardButton("📊 Mening statistikam", callback_data='stats')],
-        [InlineKeyboardButton("ℹ️ Yordam", callback_data='help')],
-        [InlineKeyboardButton("🎥 Namuna Video", url='https://youtu.be/dQw4w9WgXcQ')]
+        [InlineKeyboardButton("ℹ️ Yordam", callback_data='help')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
+    await send_with_signature(
+        context, 
+        update.message.chat_id, 
         welcome_text,
         reply_markup=reply_markup,
         parse_mode=ParseMode.MARKDOWN
@@ -140,63 +148,53 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = message.chat_id
     text = message.text.strip()
     
-    # YouTube linkini tekshirish
     if 'youtube.com' in text or 'youtu.be' in text:
-        # Ogohlantirish xabari
         warning_msg = await message.reply_text(
             "⏳ **Video yuklanmoqda...**\n"
             "Iltimos, 5 soniya kuting!\n"
-            f"📦 Maksimum hajm: 40MB\n\n"
+            "📦 Maksimum hajm: 40MB\n\n"
             "🔄 Jarayon davom etmoqda...",
             parse_mode=ParseMode.MARKDOWN
         )
         
-        # Video yuklash
         downloader = VideoDownloader()
         result = await downloader.download_video(text, chat_id)
         
         if result['success']:
-            # Yuklash muvaffaqiyatli
             try:
-                # Video yuborish
                 with open(result['file_path'], 'rb') as video_file:
                     await message.reply_video(
                         video=video_file,
-                        caption=(
-                            f"✅ **Video muvaffaqiyatli yuklandi!**\n"
-                            f"📊 Hajmi: {result['file_size']}MB\n"
-                            f"📛 Nomi: {result['file_name'][:30]}...\n\n"
-                            f"👤 Yuklagan: {update.effective_user.first_name}\n"
-                            f"⏰ Vaqti: {datetime.now().strftime('%H:%M:%S')}"
-                        ),
+                        caption=f"✅ **Video muvaffaqiyatli yuklandi!**\n"
+                               f"📊 Hajmi: {result['file_size']}MB\n"
+                               f"📛 Nomi: {result['file_name'][:30]}...",
                         parse_mode=ParseMode.MARKDOWN
                     )
                 
-                # Foydalanuvchini ogohlantirish
-                await message.reply_text(
+                # Ogohlantirish xabari
+                await send_with_signature(
+                    context,
+                    chat_id,
                     f"⚠️ **Diqqat!** Video hajmi {result['file_size']}MB. "
                     f"40MB limitiga {40 - result['file_size']:.1f}MB qoldi.",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 
             finally:
-                # Faylni o'chirish
                 if os.path.exists(result['file_path']):
                     os.remove(result['file_path'])
-                
-                # Warning xabarini o'chirish
                 await warning_msg.delete()
         else:
-            # Xatolik xabari
             await warning_msg.edit_text(
                 f"❌ **Xatolik yuz berdi!**\n\n"
                 f"Sabab: {result['error']}\n\n"
-                f"Boshqa video linkini yuboring yoki hajmi kichikroq video tanlang.",
+                f"Boshqa video linkini yuboring.",
                 parse_mode=ParseMode.MARKDOWN
             )
     else:
-        # YouTube linki emas
-        await message.reply_text(
+        await send_with_signature(
+            context,
+            chat_id,
             "❌ Iltimos, YouTube video linkini yuboring!\n"
             "Namuna: https://www.youtube.com/watch?v=...",
             parse_mode=ParseMode.MARKDOWN
@@ -206,81 +204,45 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Button bosilganda"""
     query = update.callback_query
     await query.answer()
-    chat_id = query.message.chat_id
     
     if query.data == 'download_info':
-        text = """
-📥 **Video Yuklash bo'yicha ko'rsatma:**
-
-1. YouTube'dan video linkini nusxalang
-2. Linkni shu yerga yuboring
-3. 5 soniya kuting
-4. Video avtomatik yuklanadi
-
-⚠️ **Cheklovlar:**
-• Maksimum hajm: 40MB
-• Faqat YouTube videolari
-• Bir vaqtda bitta video
-        """
-        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
-    
+        text = "📥 **Video Yuklash:**\n1. YouTube linkini yuboring\n2. 5 soniya kuting\n3. Video yuklanadi\n⚠️ Maksimum 40MB"
     elif query.data == 'stats':
-        stats = user_stats.get(chat_id, {'downloads': 0, 'last_download': None})
-        text = f"""
-📊 **Sizning statistikangiz:**
-
-📥 Yuklangan videolar: {stats['downloads']} ta
-⏰ So'nggi yuklash: {stats['last_download'].strftime('%Y-%m-%d %H:%M') if stats['last_download'] else 'Hali mavjud emas'}
-
-💾 Limit: 40MB per video
-🔢 Maksimum: 10 video/kun
-        """
-        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
-    
+        stats = user_stats.get(query.message.chat_id, {'downloads': 0, 'last_download': None})
+        text = f"📊 **Statistika:**\n📥 Yuklangan: {stats['downloads']} ta\n⏰ So'nggi: {stats['last_download'].strftime('%H:%M') if stats['last_download'] else 'Yoq'}"
     elif query.data == 'help':
-        text = """
-ℹ️ **Yordam va Qo'llanma**
-
-**Qanday ishlatiladi?**
-1. Botni ishga tushiring: /start
-2. YouTube video linkini yuboring
-3. Video avtomatik yuklanadi
-
-**Muhim eslatmalar:**
-• Video 40MB dan oshmasligi kerak
-• Yuklash 5-10 soniya davom etadi
-• Katta videolar uchun premium versiya
-
-📞 **Bog'lanish:** @IsoqovMironshoh
-        """
-        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
-
-async def add_signature(context: ContextTypes.DEFAULT_TYPE):
-    """Har bir xabar ostiga imzo qo'shish"""
-    # Bu handler har bir yuborilgan xabar uchun ishlatiladi
-    pass
-
-async def post_init(application: Application):
-    """Bot ishga tushganda"""
-    logger.info("Bot ishga tushdi! ✅")
-    logger.info(f"Isoqov Mironshoh tomonidan yaratildi")
+        text = "ℹ️ **Yordam:**\nBot YouTube videolarini yuklaydi\nLimit: 40MB per video\nYordam: @IsoqovMironshoh"
     
-    # Barcha yangi xabarlarga imzo qo'shish
-    application.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-    )
+    await query.edit_message_text(text + "\n\n👤 Isoqov Mironshoh", parse_mode=ParseMode.MARKDOWN)
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Xatoliklarni ushlash"""
+    logger.error(f"Xatolik: {context.error}")
+    if update and update.effective_chat:
+        await send_with_signature(
+            context,
+            update.effective_chat.id,
+            "❌ Xatolik yuz berdi! Iltimos, qayta urinib ko'ring.",
+            parse_mode=ParseMode.MARKDOWN
+        )
 
 def main():
     """Asosiy dastur"""
-    # Bot ilovasini yaratish
-    application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    logger.info("🤖 Bot ishga tushmoqda...")
+    
+    # ✅ FAQAT BIR MARTA TOKEN QO'LLANILMOQDA
+    application = Application.builder().token(BOT_TOKEN).build()
     
     # Handlerlar
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_error_handler(error_handler)
     
     # Botni ishga tushirish
+    logger.info("✅ Bot ishga tushdi!")
+    logger.info("👤 Isoqov Mironshoh tomonidan yaratildi")
+    
     application.run_polling(allowed_updates=Update.ALL_UPDATES)
 
 if __name__ == '__main__':
