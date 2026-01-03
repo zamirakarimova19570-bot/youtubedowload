@@ -1,0 +1,52 @@
+name: Run Telegram Bot
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 */6 * * *'  # Har 6 soatda
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install yt-dlp
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+    
+    - name: Create config file
+      run: |
+        echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" > .env
+        echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
+        echo "MAX_SIZE=40" >> .env
+    
+    - name: Run bot with signature
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      run: |
+        # Botni background da ishga tushirish
+        python bot.py &
+        # Botni tekshirish
+        sleep 10
+        echo "🤖 Bot ishga tushdi!"
+        echo "👤 Isoqov Mironshoh"
+        
+        # Botni doimiy ishlashini ta'minlash
+        while true; do
+          sleep 3600
+          echo "🔄 Bot hali ham ishlayapti..."
+        done
